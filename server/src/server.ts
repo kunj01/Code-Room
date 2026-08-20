@@ -54,7 +54,6 @@ function getUserBySocketId(socketId: SocketId): User | null {
 	}
 	return user
 }
-
 io.on("connection", (socket) => {
 	// Handle user actions
 	socket.on(SocketEvent.JOIN_REQUEST, ({ roomId, username }) => {
@@ -105,7 +104,6 @@ io.on("connection", (socket) => {
 			})
 		}
 	)
-
 	socket.on(
 		SocketEvent.DIRECTORY_CREATED,
 		({ parentDirId, newDirectory }) => {
@@ -210,17 +208,11 @@ io.on("connection", (socket) => {
 			.emit(SocketEvent.RECEIVE_MESSAGE, { message })
 	})
 
-	// Handle cursor position and selection
-	socket.on(SocketEvent.TYPING_START, ({ cursorPosition, selectionStart, selectionEnd }) => {
+	// Handle cursor position
+	socket.on(SocketEvent.TYPING_START, ({ cursorPosition }) => {
 		userSocketMap = userSocketMap.map((user) => {
 			if (user.socketId === socket.id) {
-				return {
-					...user,
-					typing: true,
-					cursorPosition,
-					selectionStart,
-					selectionEnd
-				}
+				return { ...user, typing: true, cursorPosition }
 			}
 			return user
 		})
@@ -241,25 +233,6 @@ io.on("connection", (socket) => {
 		if (!user) return
 		const roomId = user.roomId
 		socket.broadcast.to(roomId).emit(SocketEvent.TYPING_PAUSE, { user })
-	})
-
-	// Handle cursor movement without typing
-	socket.on(SocketEvent.CURSOR_MOVE, ({ cursorPosition, selectionStart, selectionEnd }) => {
-		userSocketMap = userSocketMap.map((user) => {
-			if (user.socketId === socket.id) {
-				return {
-					...user,
-					cursorPosition,
-					selectionStart,
-					selectionEnd
-				}
-			}
-			return user
-		})
-		const user = getUserBySocketId(socket.id)
-		if (!user) return
-		const roomId = user.roomId
-		socket.broadcast.to(roomId).emit(SocketEvent.CURSOR_MOVE, { user })
 	})
 
 	socket.on(SocketEvent.REQUEST_DRAWING, () => {
@@ -283,6 +256,142 @@ io.on("connection", (socket) => {
 			snapshot,
 		})
 	})
+
+	// Handle WebRTC video call signaling (audio-only removed)
+	socket.on(SocketEvent.CALL_INITIATE, ({ targetUserId, callType }) => {
+		const user = getUserBySocketId(socket.id)
+		if (!user) return
+		
+		io.to(targetUserId).emit(SocketEvent.CALL_INITIATE, {
+			from: user,
+			callType,
+		})
+	})
+
+	socket.on(SocketEvent.CALL_OFFER, ({ targetUserId, offer, callType }) => {
+		const user = getUserBySocketId(socket.id)
+		if (!user) return
+		
+		io.to(targetUserId).emit(SocketEvent.CALL_OFFER, {
+			from: user,
+			offer,
+			callType,
+		})
+	})
+
+	socket.on(SocketEvent.CALL_ANSWER, ({ targetUserId, answer }) => {
+		io.to(targetUserId).emit(SocketEvent.CALL_ANSWER, {
+			answer,
+			from: socket.id,
+		})
+	})
+
+	socket.on(SocketEvent.ICE_CANDIDATE, ({ targetUserId, candidate }) => {
+		io.to(targetUserId).emit(SocketEvent.ICE_CANDIDATE, {
+			candidate,
+			from: socket.id,
+		})
+	})
+
+	socket.on(SocketEvent.CALL_REJECT, ({ targetUserId }) => {
+		const user = getUserBySocketId(socket.id)
+		if (!user) return
+		
+		io.to(targetUserId).emit(SocketEvent.CALL_REJECT, {
+			from: user,
+		})
+	})
+
+	socket.on(SocketEvent.CALL_END, ({ targetUserId }) => {
+		const user = getUserBySocketId(socket.id)
+		if (!user) return
+		
+		io.to(targetUserId).emit(SocketEvent.CALL_END, {
+			from: user,
+		})
+	})
+
+	socket.on(SocketEvent.CALL_ACCEPTED, ({ targetUserId }) => {
+		const user = getUserBySocketId(socket.id)
+		if (!user) return
+		
+		io.to(targetUserId).emit(SocketEvent.CALL_ACCEPTED, {
+			from: user,
+		})
+	})
+
+	socket.on(SocketEvent.USER_MEDIA_STATE, ({ targetUserId, mediaState }) => {
+		const roomId = getRoomId(socket.id)
+		if (!roomId) return
+		
+		if (targetUserId) {
+			io.to(targetUserId).emit(SocketEvent.USER_MEDIA_STATE, {
+				from: socket.id,
+				mediaState,
+			})
+		} else {
+			socket.broadcast.to(roomId).emit(SocketEvent.USER_MEDIA_STATE, {
+				from: socket.id,
+				mediaState,
+			})
+		}
+	})
+
+	// Handle Voice Chat (Persistent Audio)
+	socket.on('voice-join', ({ username }) => {
+		const user = getUserBySocketId(socket.id)
+		if (!user) return
+		const roomId = user.roomId
+		
+		socket.broadcast.to(roomId).emit('voice-user-joined', {
+			user: {
+				socketId: socket.id,
+				username: username || user.username,
+			},
+		})
+	})
+
+	socket.on('voice-leave', () => {
+		const user = getUserBySocketId(socket.id)
+		if (!user) return
+		const roomId = user.roomId
+		
+		socket.broadcast.to(roomId).emit('voice-user-left', {
+			socketId: socket.id,
+		})
+	})
+
+	socket.on('voice-offer', ({ targetSocketId, offer }) => {
+		io.to(targetSocketId).emit('voice-offer', {
+			fromSocketId: socket.id,
+			offer,
+		})
+	})
+
+	socket.on('voice-answer', ({ targetSocketId, answer }) => {
+		io.to(targetSocketId).emit('voice-answer', {
+			fromSocketId: socket.id,
+			answer,
+		})
+	})
+
+	socket.on('voice-ice-candidate', ({ targetSocketId, candidate }) => {
+		io.to(targetSocketId).emit('voice-ice-candidate', {
+			fromSocketId: socket.id,
+			candidate,
+		})
+	})
+
+	socket.on('voice-mute-state', ({ isMuted }) => {
+		const user = getUserBySocketId(socket.id)
+		if (!user) return
+		const roomId = user.roomId
+		
+		socket.broadcast.to(roomId).emit('voice-mute-state', {
+			fromSocketId: socket.id,
+			isMuted,
+		})
+	})
 })
 
 const PORT = process.env.PORT || 3000
@@ -292,6 +401,33 @@ app.get("/", (req: Request, res: Response) => {
 	res.sendFile(path.join(__dirname, "..", "public", "index.html"))
 })
 
+// Health check endpoint
+app.get("/health", (req: Request, res: Response) => {
+	res.status(200).json({
+		status: "OK",
+		timestamp: new Date().toISOString(),
+		uptime: process.uptime(),
+		message: "Server is healthy and running"
+	})
+})
+
 server.listen(PORT, () => {
 	console.log(`Listening on port ${PORT}`)
+	
+	// Keep-alive mechanism for Render free tier
+	const RENDER_URL = process.env.RENDER_URL || `http://localhost:${PORT}`
+	
+	// Self-ping every 2 minutes (120000ms) to prevent sleep
+	setInterval(async () => {
+		try {
+			const response = await fetch(`${RENDER_URL}/health`)
+			if (response.ok) {
+				console.log(`✓ Keep-alive ping successful at ${new Date().toISOString()}`)
+			} else {
+				console.log(`⚠ Keep-alive ping failed with status: ${response.status}`)
+			}
+		} catch (error) {
+			console.log(`✗ Keep-alive ping error: ${error}`)
+		}
+	}, 120000) // 2 minutes
 })

@@ -22,11 +22,19 @@ enum SocketEvent {
 	RECEIVE_MESSAGE = "receive-message",
 	TYPING_START = "typing-start",
 	TYPING_PAUSE = "typing-pause",
-	CURSOR_MOVE = "cursor-move",
 	USERNAME_EXISTS = "username-exists",
 	REQUEST_DRAWING = "request-drawing",
 	SYNC_DRAWING = "sync-drawing",
 	DRAWING_UPDATE = "drawing-update",
+	// WebRTC Video Call Events (audio-only calls removed)
+	CALL_INITIATE = "call-initiate",
+	CALL_OFFER = "call-offer",
+	CALL_ANSWER = "call-answer",
+	ICE_CANDIDATE = "ice-candidate",
+	CALL_REJECT = "call-reject",
+	CALL_END = "call-end",
+	CALL_ACCEPTED = "call-accepted",
+	USER_MEDIA_STATE = "user-media-state",
 }
 
 interface SocketContext {
